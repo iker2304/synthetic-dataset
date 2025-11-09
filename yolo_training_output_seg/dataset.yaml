@@ -1,0 +1,9 @@
+
+# Dataset configuration for YOLO training
+path: yolo_training_output_seg\yolo_dataset
+train: images/train
+val: images/val
+
+# Classes
+nc: 1
+names: [0]

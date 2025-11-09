@@ -1,0 +1,24 @@
+=== REPORTE DE ENTRENAMIENTO YOLO ===
+
+Configuración del modelo:
+- Modelo: yolov8n-seg
+- Épocas: 100
+- Batch size: 32
+- Learning rate: 0.01
+- Tamaño de imagen: 640
+- Número de clases: 1
+
+Dataset:
+- Imágenes de entrenamiento: 800
+- Imágenes de validación: 200
+
+Métricas finales:
+- metrics/precision(B): 0.9997354334729807
+- metrics/recall(B): 1.0
+- metrics/mAP50(B): 0.995
+- metrics/mAP50-95(B): 0.9949202085192317
+- metrics/precision(M): 0.9997354334729807
+- metrics/recall(M): 1.0
+- metrics/mAP50(M): 0.995
+- metrics/mAP50-95(M): 0.9884839966914155
+- fitness: 1.9834042052106473

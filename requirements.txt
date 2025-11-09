@@ -1,0 +1,26 @@
+# Dependencias para entrenamiento de redes neuronales de detección de objetos
+
+# Framework principal
+ultralytics>=8.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Procesamiento de datos
+numpy>=1.21.0
+opencv-python>=4.5.0
+Pillow>=8.3.0
+matplotlib>=3.5.0
+scikit-learn>=1.3.0
+
+# Utilidades
+PyYAML>=6.0
+tqdm>=4.62.0
+pandas>=1.3.0
+
+# Visualización y métricas
+seaborn>=0.11.0
+tensorboard>=2.8.0
+
+# Para desarrollo
+jupyter>=1.0.0
+ipykernel>=6.0.0
