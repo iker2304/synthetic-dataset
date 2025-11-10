@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 import random
+import inspect
 
 camera = bpy.data.objects['Camera']
 # Distancia de órbita constante basada en la posición inicial de la cámara
@@ -192,20 +193,28 @@ def project_3d_to_2d(point_3d, camera_matrix, intrinsic_matrix, resolution_x, re
 
 def get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y):
     """
-    Calcula el bbox 2D de un objecto en la imagen.
+    Calcula el bbox 2D de un objeto en la imagen.
+    Usa vértices del mesh si están disponibles; si no, hace fallback a las esquinas de bound_box.
     """
-    
+
     if obj.type != 'MESH':
         return None  # Solo se puede calcular para objetos de tipo MESH
-    
-    # Obtener todos los vértices del objeto en coordenadas del mundo
+
     mesh = obj.data
     world_vertices = []
 
-    for vertex in mesh.vertices:
-        # Transformar vértice local a coordenadas del mundo
-        world_vertex = obj.matrix_world @ vertex.co # Se transforma la coordenada local del vértice a su posición en el espacio del mundo
-        world_vertices.append(world_vertex)
+    # Vértices del mesh si existen; si no, las esquinas del bound_box
+    try:
+        if hasattr(mesh, 'vertices') and len(mesh.vertices) > 0:
+            for vertex in mesh.vertices:
+                world_vertices.append(obj.matrix_world @ vertex.co)
+        else:
+            for corner in obj.bound_box:
+                world_vertices.append(obj.matrix_world @ mathutils.Vector(corner))
+    except Exception:
+        # Fallback adicional por seguridad
+        for corner in obj.bound_box:
+            world_vertices.append(obj.matrix_world @ mathutils.Vector(corner))
 
     # Proyectar todos los vértices a coordenadas 2D
     projected_points = []
@@ -217,24 +226,24 @@ def get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_
     # Si no hay puntos proyectados visibles, el objeto no está en la vista
     if not projected_points:
         return None
-    
+
     # Calcular el bbox 2D
     x_coords = [p[0] for p in projected_points]
     y_coords = [p[1] for p in projected_points]
 
-    min_x = max(0, min(x_coords)) # Coordenada X más pequeña (más a la izquierda del objeto)
-    max_x = min(resolution_x, max(x_coords)) # Coordenada X más grande (más a la derecha del objeto)
+    min_x = max(0, min(x_coords))  # Coordenada X más pequeña (más a la izquierda del objeto)
+    max_x = min(resolution_x, max(x_coords))  # Coordenada X más grande (más a la derecha del objeto)
     min_y = max(0, min(y_coords))
     max_y = min(resolution_y, max(y_coords))
 
     # Verificar que el bbox tenga área válida
     if max_x <= min_x or max_y <= min_y:
         return None  # Bbox inválido
-    
+
     bbox_width = max_x - min_x
     bbox_height = max_y - min_y
 
-    return{
+    return {
         "object_name": obj.name,
         "bbox_2d": {
             "x_min": min_x,
@@ -244,7 +253,7 @@ def get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_
             "width": bbox_width,
             "height": bbox_height,
             "center_x": min_x + bbox_width / 2,
-            "center_y": min_y + bbox_height / 2
+            "center_y": min_y + bbox_height / 2,
         },
         "visible_vertices": len(projected_points),
         "total_vertices": len(world_vertices),
@@ -253,11 +262,24 @@ def get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_
 def get_all_objects_annotations(camera_matrix, intrinsic_matrix, resolution_x, resolution_y):
     """
     Obtiene las anotaciones de todos los objetos visibles en la imagen.
+
+    Compatibilidad: si la función get_object_bounding_box_2d en el entorno actual
+    tiene una firma antigua (4 parámetros), se llama con 4 argumentos. Si tiene la
+    firma nueva (5 parámetros), se llama con 5.
     """
     annotations = []
+    # Detectar número de parámetros de la función en tiempo de ejecución
+    try:
+        param_count = len(inspect.signature(get_object_bounding_box_2d).parameters)
+    except Exception:
+        param_count = 5  # Asumir firma nueva si introspección falla
+
     for obj in bpy.context.scene.objects:
         if obj.type == 'MESH':
-            bbox_2d = get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y)
+            if param_count >= 5:
+                bbox_2d = get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y)
+            else:
+                bbox_2d = get_object_bounding_box_2d(obj, camera_matrix, resolution_x, resolution_y)
             if bbox_2d:
                 annotations.append(bbox_2d)
     return annotations
