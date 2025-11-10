@@ -1,5 +1,0 @@
-names:
-- Cube
-path: C:\Users\ikerc\Documents\UPC\TFG\Software\synthetic-dataset-cube\dataset\yolo_seg
-train: C:\Users\ikerc\Documents\UPC\TFG\Software\synthetic-dataset-cube\dataset\yolo_seg\images\train
-val: C:\Users\ikerc\Documents\UPC\TFG\Software\synthetic-dataset-cube\dataset\yolo_seg\images\val

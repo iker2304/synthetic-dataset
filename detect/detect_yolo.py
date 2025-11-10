@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -11,6 +12,21 @@ try:
     from ultralytics import YOLO
 except Exception:
     YOLO = None
+
+# Configuración por defecto para ejecutar sin argumentos de terminal
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "weights": r"C:\Users\ikerc\Documents\UPC\TFG\Software\synthetic-dataset-cube\yolo_training_output_seg\models\best_model.pt",
+    "source": str((Path(__file__).resolve().parents[1] / "img").resolve()),
+    "save_dir": str((Path(__file__).resolve().parents[1] / "detect" / "outputs").resolve()),
+    "conf": 0.25,
+    "iou": 0.7,
+    "imgsz": 640,
+    "device": "0",  # usa GPU 0 si está disponible; si no, CPU
+    "max_det": 300,
+    "half": False,
+    "save_json": True,
+    "save_txt": False,
+}
 
 
 def _resolve_device(device: str | int) -> int | str:
@@ -185,7 +201,7 @@ def run_detection(
 
 def parse_args():
     p = argparse.ArgumentParser(description="Detección YOLOv8-seg: máscaras y bounding boxes")
-    p.add_argument("--weights", type=str, default=str(Path("yolov8n-seg.pt").resolve()), help="Ruta a pesos .pt")
+    p.add_argument("--weights", type=str, default=r"C:\Users\ikerc\Documents\UPC\TFG\Software\synthetic-dataset-cube\yolo_training_output_seg\models\best_model.pt", help="Ruta a pesos .pt")
     p.add_argument("--source", type=str, default=str((Path(__file__).resolve().parents[1] / "img").resolve()), help="Imagen/video/carpeta")
     p.add_argument("--save_dir", type=str, default=str((Path(__file__).resolve().parents[1] / "detect" / "outputs").resolve()), help="Directorio salida")
     p.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
@@ -200,24 +216,43 @@ def parse_args():
 
 
 def main():
-    args = parse_args()
-    weights = Path(args.weights)
-    source = Path(args.source)
-    save_dir = Path(args.save_dir)
+    # Si se pasan banderas ("--"), usa argparse; de lo contrario, usa DEFAULT_CONFIG
+    has_flags = any(str(a).startswith("--") for a in sys.argv[1:])
+    if has_flags:
+        args = parse_args()
+        cfg = {
+            "weights": args.weights,
+            "source": args.source,
+            "save_dir": args.save_dir,
+            "conf": args.conf,
+            "iou": args.iou,
+            "imgsz": args.imgsz,
+            "device": args.device,
+            "max_det": args.max_det,
+            "half": args.half,
+            "save_json": args.save_json,
+            "save_txt": args.save_txt,
+        }
+    else:
+        cfg = DEFAULT_CONFIG
+
+    weights = Path(cfg["weights"])
+    source = Path(cfg["source"]) 
+    save_dir = Path(cfg["save_dir"]) 
     save_dir.mkdir(parents=True, exist_ok=True)
 
     run_detection(
         weights=weights,
         source=source,
         save_dir=save_dir,
-        conf=args.conf,
-        iou=args.iou,
-        imgsz=args.imgsz,
-        device=args.device,
-        max_det=args.max_det,
-        half=args.half,
-        save_json=args.save_json,
-        save_txt=args.save_txt,
+        conf=float(cfg["conf"]),
+        iou=float(cfg["iou"]),
+        imgsz=int(cfg["imgsz"]),
+        device=str(cfg["device"]),
+        max_det=int(cfg["max_det"]),
+        half=bool(cfg["half"]),
+        save_json=bool(cfg["save_json"]),
+        save_txt=bool(cfg["save_txt"]),
     )
 
 

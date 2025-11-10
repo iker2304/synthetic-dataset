@@ -1,4 +1,5 @@
 import bpy
+from bpy_extras.object_utils import world_to_camera_view
 import math
 import mathutils
 import json
@@ -15,6 +16,7 @@ orbit_distance = initial_camera_location.length if initial_camera_location.lengt
 
 # Se definen las configuraciones de renderizado (para la matriz intrínseca)
 scene = bpy.context.scene
+scene.camera = camera
 resolution_x = scene.render.resolution_x = 1920
 resolution_y = scene.render.resolution_y = 1080
 scene.render.resolution_percentage = 50  # Reducir resolución a 50% para acelerar
@@ -158,38 +160,28 @@ def get_intrinsic_matrix(camera_object, resolution_x, resolution_y):
 # Función Proyección
 
 def project_3d_to_2d(point_3d, camera_matrix, intrinsic_matrix, resolution_x, resolution_y):
+    """
+    Proyecta un punto 3D a coordenadas de imagen usando world_to_camera_view de Blender,
+    que respeta los parámetros de la cámara, sensor fit, aspect ratio y pipeline interno.
 
-    # Convertir punto 3D a Vector y a coordenadas homogéneas (mundo -> cámara)
-    p = mathutils.Vector(point_3d)
-    p_h = mathutils.Vector((p.x, p.y, p.z, 1.0))
-
-    # Transformar a coordenadas de cámara
-    point_camera = camera_matrix @ p_h
-
-    # En el sistema de Blender, la cámara mira a lo largo de -Z.
-    # Si z >= 0, el punto está detrás de la cámara o sobre el plano; además evitamos división por cero.
-    z = point_camera.z
-    if z >= 0 or abs(z) < 1e-8:
+    Retorna (x_px, y_px) si el punto cae dentro del frame; de lo contrario, None.
+    """
+    scene = bpy.context.scene
+    camera_obj = scene.camera
+    if camera_obj is None:
         return None
 
-    # Proyección con intrínsecos: u = fx * X/Z + cx ; v = fy * Y/Z + cy
-    fx = intrinsic_matrix[0][0]
-    fy = intrinsic_matrix[1][1]
-    cx = intrinsic_matrix[0][2]
-    cy = intrinsic_matrix[1][2]
+    co_world = mathutils.Vector(point_3d)
+    co_ndc = world_to_camera_view(scene, camera_obj, co_world)
 
-    u = fx * (point_camera.x / z) + cx
-    v = fy * (point_camera.y / z) + cy
+    # co_ndc.x/y en [0,1] si está dentro del frame; co_ndc.z es profundidad relativa
+    if not (0.0 <= co_ndc.x <= 1.0 and 0.0 <= co_ndc.y <= 1.0):
+        return None
 
-    # Convertir a coordenadas de píxel; invertimos Y para coordenadas de imagen
-    pixel_x = u
-    pixel_y = resolution_y - v
+    pixel_x = float(co_ndc.x * resolution_x)
+    pixel_y = float((1.0 - co_ndc.y) * resolution_y)  # convertir a origen en esquina superior izquierda
 
-    # Verificar si está dentro de los límites de la imagen
-    if 0 <= pixel_x < resolution_x and 0 <= pixel_y < resolution_y:
-        return (float(pixel_x), float(pixel_y))
-    else:
-        return None  # El punto está fuera de la imagen
+    return (pixel_x, pixel_y)
 
 def get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y):
     """
@@ -309,6 +301,92 @@ def get_scene_z_bounds():
             z_min = z if z_min is None else min(z_min, z)
             z_max = z if z_max is None else max(z_max, z)
     return z_min, z_max
+
+# Selección del objeto principal y utilidades de encuadre
+def _bound_box_volume(obj):
+    try:
+        corners = [obj.matrix_world @ mathutils.Vector(c) for c in obj.bound_box]
+        xs = [c.x for c in corners]
+        ys = [c.y for c in corners]
+        zs = [c.z for c in corners]
+        return max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)
+    except Exception:
+        return 0.0, 0.0, 0.0
+
+def find_primary_mesh_object(preferred_names=("Cube", "cube")):
+    """Devuelve el objeto MESH principal: primero por nombre preferido; si no, el de mayor volumen de bound_box."""
+    # Buscar por nombre preferido
+    for name in preferred_names:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.type == 'MESH':
+            return obj
+    # Si no existe, escoger el mayor por volumen aproximado
+    best = None
+    best_vol = -1.0
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH':
+            continue
+        dx, dy, dz = _bound_box_volume(obj)
+        vol = max(dx, 0.0) * max(dy, 0.0) * max(dz, 0.0)
+        if vol > best_vol:
+            best = obj
+            best_vol = vol
+    return best
+
+def is_object_in_frame(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y):
+    """Retorna True si el bbox 2D del objeto existe (alguna parte visible en el frame)."""
+    bbox = get_object_bounding_box_2d(obj, camera_matrix, intrinsic_matrix, resolution_x, resolution_y)
+    return bbox is not None
+
+def is_object_fully_in_frame(obj, resolution_x, resolution_y, margin_pixels=0):
+    """Retorna True si TODOS los vértices (o esquinas del bound_box) proyectan dentro del frame.
+    Usa world_to_camera_view directamente para comprobar cada punto y aplica un margen opcional."""
+    if obj.type != 'MESH':
+        return False
+    scene = bpy.context.scene
+    cam = scene.camera
+    if cam is None:
+        return False
+
+    # Recoger puntos a proyectar
+    points = []
+    mesh = obj.data
+    try:
+        if hasattr(mesh, 'vertices') and len(mesh.vertices) > 0:
+            for v in mesh.vertices:
+                points.append(obj.matrix_world @ v.co)
+        else:
+            for c in obj.bound_box:
+                points.append(obj.matrix_world @ mathutils.Vector(c))
+    except Exception:
+        for c in obj.bound_box:
+            points.append(obj.matrix_world @ mathutils.Vector(c))
+
+    # Proyectar y validar que todos estén dentro
+    pixel_pts = []
+    for p in points:
+        ndc = world_to_camera_view(scene, cam, p)
+        # Debe estar frente a la cámara y dentro del frustum en X/Y
+        if not (0.0 <= ndc.x <= 1.0 and 0.0 <= ndc.y <= 1.0) or ndc.z < 0.0:
+            return False
+        px = float(ndc.x * resolution_x)
+        py = float((1.0 - ndc.y) * resolution_y)
+        pixel_pts.append((px, py))
+
+    # Calcular bbox en píxeles y aplicar margen
+    xs = [p[0] for p in pixel_pts]
+    ys = [p[1] for p in pixel_pts]
+    min_x = min(xs)
+    max_x = max(xs)
+    min_y = min(ys)
+    max_y = max(ys)
+
+    if min_x < margin_pixels or min_y < margin_pixels:
+        return False
+    if max_x > (resolution_x - margin_pixels) or max_y > (resolution_y - margin_pixels):
+        return False
+
+    return True
 
 # Utilidades de iluminación
 def _clamp(x, lo=0.0, hi=1.0):
@@ -514,7 +592,7 @@ annotations_dir_abs = bpy.path.abspath(annotations_dir)
 os.makedirs(output_dir_abs, exist_ok=True)
 os.makedirs(annotations_dir_abs, exist_ok=True)
 
-num_samples = 20
+num_samples = 100
 
 # Ejecutar: blender -b archivo.blend -P blender.py -- --num_samples 1000
 argv = sys.argv
@@ -542,35 +620,54 @@ z_expand = 1.0  # Ajusta este valor para aumentar/disminuir el rango
 z_min_expanded = z_min - z_expand
 z_max_expanded = z_max + z_expand
 
+primary_obj = find_primary_mesh_object()
+if primary_obj is None:
+    print("[Aviso] No se encontró objeto MESH principal; se usará el origen como objetivo.")
+
 for frame_index in range(num_samples):
-    # Trayectoria circular simple alrededor del origen
-    angle_z = random.uniform(0.0, 2 * math.pi)
-    # Elegir Z respetando la distancia constante al origen (clamp a [-orbit_distance, orbit_distance])
-    z_lower = max(z_min_expanded, -orbit_distance)
-    z_upper = min(z_max_expanded, orbit_distance)
-    z = random.uniform(z_lower, z_upper) if z_lower <= z_upper else 0.0
-    # Ajustar radio en XY para mantener ||cam_location|| = orbit_distance
-    r_xy_sq = max(orbit_distance * orbit_distance - z * z, 0.0)
-    r_xy = math.sqrt(r_xy_sq)
-    cam_location = (
-        r_xy * math.cos(angle_z),
-        r_xy * math.sin(angle_z),
-        z,
-    )
+    max_attempts = 100
+    attempt = 0
+    visible = False
+    
+    base_distance = orbit_distance
+    while attempt < max_attempts and not visible:
+        attempt += 1
+        # Aumentar distancia si en intentos anteriores no cabe completo
+        dist_current = min(base_distance * (1.0 + 0.02 * attempt), base_distance * 3.0)
+        # Trayectoria circular simple alrededor del objetivo
+        angle_z = random.uniform(0.0, 2 * math.pi)
+        # Elegir Z respetando la distancia al objetivo (clamp a [-dist_current, dist_current])
+        z_lower = max(z_min_expanded, -dist_current)
+        z_upper = min(z_max_expanded, dist_current)
+        z = random.uniform(z_lower, z_upper) if z_lower <= z_upper else 0.0
+        # Ajustar radio en XY para mantener ||cam_location - target|| ~= dist_current
+        r_xy_sq = max(dist_current * dist_current - z * z, 0.0)
+        r_xy = math.sqrt(r_xy_sq)
 
-    # Calcular la rotación para apuntar al objetivo (look-at)
-    target_location = (0.0, 0.0, 0.0)  # Punto al que apuntar
-    direction = mathutils.Vector(target_location) - mathutils.Vector(cam_location)
-    if direction.length > 1e-8:
-        rotation_quat = direction.to_track_quat('-Z', 'Y')
-    else:
-        rotation_quat = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))  # Identidad
-    set_camera_pose(camera, cam_location, rotation_quat)
+        target_location = tuple(primary_obj.location) if primary_obj else (0.0, 0.0, 0.0)
+        cam_location = (
+            target_location[0] + r_xy * math.cos(angle_z),
+            target_location[1] + r_xy * math.sin(angle_z),
+            target_location[2] + z,
+        )
 
-    # Asegurar que la vista se actualiza antes de leer matrices
-    bpy.context.view_layer.update()
-    # Matriz Extrínseca (4x4)
-    world_to_camera_matrix = camera.matrix_world.inverted()
+        # Calcular la rotación para apuntar al objetivo (look-at)
+        direction = mathutils.Vector(target_location) - mathutils.Vector(cam_location)
+        rotation_quat = direction.to_track_quat('-Z', 'Y') if direction.length > 1e-8 else mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
+        set_camera_pose(camera, cam_location, rotation_quat)
+
+        # Actualizar y calcular matriz extrínseca
+        bpy.context.view_layer.update()
+        world_to_camera_matrix = camera.matrix_world.inverted()
+
+        # Comprobar visibilidad del objeto principal
+        if primary_obj:
+            visible = is_object_fully_in_frame(primary_obj, resolution_x, resolution_y, margin_pixels=0)
+        else:
+            visible = True  # Si no hay objeto, no forzar visibilidad
+
+    if not visible:
+        print(f"[Aviso] No se logró encuadrar el objeto en {max_attempts} intentos; se continúa con la última vista.")
 
     print(f"\n--- View {frame_index} ---")
     print(f"Camera location: {camera.location}")
@@ -582,9 +679,9 @@ for frame_index in range(num_samples):
     file_name = f"render_{frame_index:03d}"
     # Asegurar ruta absoluta para el render y que exista el directorio
     scene.render.filepath = os.path.join(output_dir_abs, file_name)
-    # Randomizar DOF de cámara y la iluminación por frame (semilla basada en frame para reproducibilidad)
-    randomize_camera_dof(camera, origin=(0.0, 0.0, 0.0), seed=frame_index)
-    randomize_lighting(scene, origin=(0.0, 0.0, 0.0), seed=frame_index)
+    # Randomizar DOF de cámara y la iluminación por frame, centrados en el objeto
+    randomize_camera_dof(camera, origin=target_location, seed=frame_index)
+    randomize_lighting(scene, origin=target_location, seed=frame_index)
     bpy.ops.render.render(write_still=True)
 
     # Guardar anotaciones

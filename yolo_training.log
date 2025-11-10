@@ -29,3 +29,34 @@
 2025-11-09 23:57:30,010 - INFO - Reporte guardado en: yolo_training_output_seg\training_report.txt
 2025-11-09 23:57:30,010 - INFO - === ENTRENAMIENTO COMPLETADO EXITOSAMENTE EN GPU ===
 2025-11-09 23:57:30,010 - INFO - Resultados guardados en: yolo_training_output_seg
+2025-11-10 20:23:55,227 - INFO - === INICIANDO ENTRENAMIENTO YOLO SEGMENTATION CON GPU FORZADA ===
+2025-11-10 20:23:55,228 - INFO - GPUs detectadas: 1
+2025-11-10 20:23:55,238 - INFO -    GPU 0: NVIDIA GeForce RTX 3060 (12.00 GB)
+2025-11-10 20:23:55,239 - INFO - Usando GPU 0: NVIDIA GeForce RTX 3060
+2025-11-10 20:23:55,239 - INFO - Realizando validaciones del sistema...
+2025-11-10 20:23:55,244 - INFO - Dataset validado: 983 anotaciones, 983 imágenes
+2025-11-10 20:23:55,245 - INFO - Memoria GPU: 12.00 GB
+2025-11-10 20:23:55,245 - INFO - Batch size configurado: 32
+2025-11-10 20:23:55,245 - INFO - FORZANDO USO DE GPU: NVIDIA GeForce RTX 3060
+2025-11-10 20:23:55,245 - INFO - Memoria GPU disponible: 12.00 GB
+2025-11-10 20:23:55,245 - INFO - Caché de GPU limpiado
+2025-11-10 20:23:55,247 - INFO - Iniciando entrenamiento con GPU forzada...
+2025-11-10 20:23:55,247 - INFO - Preparando dataset...
+2025-11-10 20:23:55,247 - INFO - Iniciando conversión del dataset...
+2025-11-10 20:23:55,895 - INFO - Conversión completada. 983 imágenes procesadas.
+2025-11-10 20:23:55,896 - INFO - Clases detectadas: ['Cube']
+2025-11-10 20:23:55,898 - INFO - Dataset dividido: 786 entrenamiento, 197 validación
+2025-11-10 20:23:56,226 - INFO - Modelo yolov8n-seg cargado exitosamente
+2025-11-10 20:23:56,229 - INFO - Organizando dataset en estructura YOLO...
+2025-11-10 20:24:06,174 - INFO - Estado GPU antes del entrenamiento:
+2025-11-10 20:24:06,175 - INFO -    - Memoria GPU usada: 0.00 GB
+2025-11-10 20:24:06,175 - INFO -    - Memoria GPU reservada: 0.00 GB
+2025-11-10 20:42:05,271 - INFO - Entrenamiento completado exitosamente en GPU
+2025-11-10 20:42:05,271 - INFO - Estado final GPU:
+2025-11-10 20:42:05,272 - INFO -    - Memoria GPU máxima usada: 4.44 GB
+2025-11-10 20:42:05,272 - INFO -    - Memoria GPU actual: 0.11 GB
+2025-11-10 20:42:05,354 - INFO - Generando reporte de entrenamiento...
+2025-11-10 20:42:06,455 - INFO - Gráficas guardadas en: yolo_training_output_seg\plots\training_metrics.png
+2025-11-10 20:42:06,456 - INFO - Reporte guardado en: yolo_training_output_seg\training_report.txt
+2025-11-10 20:42:06,456 - INFO - === ENTRENAMIENTO COMPLETADO EXITOSAMENTE EN GPU ===
+2025-11-10 20:42:06,457 - INFO - Resultados guardados en: yolo_training_output_seg
