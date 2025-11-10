@@ -513,7 +513,7 @@ print(intrinsic_matrix)
 # Calcular rango Z de escena para muestreo de la cámara
 z_min, z_max = get_scene_z_bounds()
 if z_min is None or z_max is None:
-    z_min, z_max = 1.0, 4.0  # Fallback si no hay mallas
+    z_min, z_max = 1.0, 4.0  
 
 # Ampliar el rango de muestreo en Z (margen adicional)
 z_expand = 1.0  # Ajusta este valor para aumentar/disminuir el rango

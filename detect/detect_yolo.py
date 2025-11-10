@@ -13,27 +13,33 @@ except Exception:
     YOLO = None
 
 
-def _ensure_cuda(device: str | int) -> int:
+def _resolve_device(device: str | int) -> int | str:
     """
-    Fuerza el uso de CUDA. Devuelve el índice de dispositivo (int).
-    Lanza error si CUDA no está disponible.
+    Determina el dispositivo de inferencia.
+    - Si se pasa 'cpu' o no hay CUDA disponible, retorna 'cpu'.
+    - Si hay CUDA disponible y se pasa un índice (p. ej., 0), retorna ese índice.
     """
+    # Normalizar entrada
     if isinstance(device, str):
-        device = device.strip()
-        if device.lower() == "cpu":
-            raise RuntimeError(
-                "Este script está forzado a GPU. Usa --device 0 para CUDA."
-            )
+        dev_str = device.strip().lower()
+        if dev_str == "cpu":
+            return "cpu"
         try:
-            device = int(device)
+            dev_idx = int(dev_str)
+        except Exception:
+            raise ValueError("--device debe ser entero (p. ej., 0) o 'cpu'.")
+    else:
+        try:
+            dev_idx = int(device)
         except Exception:
             raise ValueError("--device debe ser entero (p. ej., 0) o 'cpu'.")
 
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "CUDA no está disponible. Verifica drivers NVIDIA y PyTorch con CUDA."
-        )
-    return int(device)
+    # Resolver según disponibilidad de CUDA
+    if torch.cuda.is_available():
+        return int(dev_idx)
+    else:
+        print("Advertencia: CUDA no está disponible; usando CPU.")
+        return "cpu"
 
 
 def _class_name(names: Any, cls_id: int) -> str:
@@ -127,8 +133,11 @@ def run_detection(
             "Ultralytics no está instalado. Instala con: pip install ultralytics"
         )
 
-    dev_idx = _ensure_cuda(device)
-    print(f"Usando GPU CUDA índice: {dev_idx}")
+    dev = _resolve_device(device)
+    if dev == "cpu":
+        print("Usando CPU para inferencia.")
+    else:
+        print(f"Usando GPU CUDA índice: {dev}")
 
     # Cargar modelo
     print(f"Cargando pesos: {weights}")
@@ -144,12 +153,17 @@ def run_detection(
     json_dir.mkdir(parents=True, exist_ok=True)
 
     # Ejecutar predicción
+    # En CPU no se soporta FP16; desactivar si fue solicitado
+    if dev == "cpu" and half:
+        print("FP16 no soportado en CPU, desactivando --half.")
+        half = False
+
     results = model.predict(
         source=str(source),
         conf=conf,
         iou=iou,
         imgsz=imgsz,
-        device=dev_idx,
+        device=dev,
         max_det=max_det,
         half=half,
         save=True,
