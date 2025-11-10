@@ -1,10 +1,19 @@
-import argparse
 from pathlib import Path
 import json
 import shutil
 
 import cv2
 import numpy as np
+
+# Configuración fija (editar según necesidad)
+ANNOTATIONS_DIR = Path("render_output/annotations").resolve()
+IMAGES_DIR = Path("render_output").resolve()
+OUT_DIR = Path("annotated").resolve()
+LABEL_TYPE = "all"  # opciones: "center", "corners", "all"
+LABELS = True
+RADIUS = 6
+DRAW_BBOX = True
+OVERWRITE_IMAGE = False
 
 # Reutilizamos funciones si el módulo está disponible; si no, definimos mínimas
 try:
@@ -74,17 +83,7 @@ except Exception:
         return canvas
 
 
-def parse_args():
-    p = argparse.ArgumentParser(description="Visualiza por lotes anotaciones como puntos y bbox desde JSONs")
-    p.add_argument("--annotations-dir", type=str, default=str(Path("render/annotations").resolve()), help="Carpeta con archivos JSON")
-    p.add_argument("--images-dir", type=str, default=str(Path("render").resolve()), help="Carpeta con imágenes base (opcional)")
-    p.add_argument("--out-dir", type=str, default=str(Path("representación").resolve()), help="Carpeta de salida para las visualizaciones")
-    p.add_argument("--label-type", type=str, default="all", choices=["center", "corners", "all"], help="Puntos a visualizar por objeto")
-    p.add_argument("--labels", action="store_true", default=True, help="Dibujar etiquetas con nombre del objeto y centro")
-    p.add_argument("--radius", type=int, default=6, help="Radio de los puntos")
-    p.add_argument("--draw-bbox", action="store_true", default=True, help="Dibujar también el rectángulo del bbox (por defecto activado)")
-    p.add_argument("--overwrite-image", action="store_true", help="Escribir directamente sobre el PNG de la imagen renderizada si existe")
-    return p.parse_args()
+# Nota: Se ha eliminado argparse; la configuración se toma de las variables anteriores
 
 
 def infer_image_path(json_path: Path, images_dir: Path, data: dict) -> Path | None:
@@ -109,10 +108,9 @@ def infer_image_path(json_path: Path, images_dir: Path, data: dict) -> Path | No
 
 
 def main():
-    args = parse_args()
-    ann_dir = Path(args.annotations_dir)
-    img_dir = Path(args.images_dir)
-    out_dir = Path(args.out_dir)
+    ann_dir = ANNOTATIONS_DIR
+    img_dir = IMAGES_DIR
+    out_dir = OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     json_files = sorted(list(ann_dir.glob("*.json")))
@@ -127,11 +125,11 @@ def main():
             height = int(data.get("image_resolution", {}).get("height", 1080))
             img_path = infer_image_path(jf, img_dir, data)
             canvas = create_canvas(width, height, img_path)
-            canvas = draw_points(canvas, data, args.label_type, args.radius, args.labels, draw_bbox=args.draw_bbox)
+            canvas = draw_points(canvas, data, LABEL_TYPE, RADIUS, LABELS, draw_bbox=DRAW_BBOX)
 
             stem = jf.stem.replace("_annotations", "")
             # Si hay imagen base y se solicita sobrescribir, escribir encima del PNG original
-            if args.overwrite_image and img_path is not None and img_path.exists():
+            if OVERWRITE_IMAGE and img_path is not None and img_path.exists():
                 out_file = img_path
             else:
                 # Guardar copia anotada en la carpeta de salida
